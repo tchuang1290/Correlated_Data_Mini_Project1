@@ -1,0 +1,397 @@
+# Checkpoint 3 {-}
+
+**You can download a template RMarkdown file to start from [here](template_rmds/checkpoint-3.Rmd).**
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error=TRUE)
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(ggplot2)
+library(readr)
+
+library(astsa)
+```
+
+You should work with your time series project partner on the R code, but I want each of you to write your own paragraphs of what you learn. This will be to your benefit to have two separate insights when you work on writing up the mini-project.
+
+
+## Revisit Checkpoint 2 {-}
+
+1. With your partner, decide on one Google Trends search term you'd like to use. You may choose one of the keywords you used individually or choose another. Please list the word that you together decided on.
+
+ANSWER:
+ 
+```{r} 
+# load in the data & include any data cleaning needed (creating date variables, etc.)
+
+#The term we chose was "deforestation"
+
+deforestation <- read_csv("deforestationTS.csv")
+
+deforestation <- deforestation %>%
+  mutate(Date = ym(Month)) %>%
+  mutate(month = month(Date)) %>%
+  mutate(year = year(Date)) %>%
+  mutate(dec_date = decimal_date(Date))
+
+#Note: The data column in desforestation was changed to be titled "DFSearches" for clarity and convienence. - Jack
+```
+
+2. Do a brief search about the key topic (Google Trend). Find 2 reputable sources (journal articles or reputable news sources) on the topic. Write a short paragraph introducing general topic and why you think it is interesting and important to investigate the popularity of the topic over time. 
+
+ANSWER:
+
+Source 1: Impacts of forestation and deforestation on local temperature across the globe (Prevedello et al, 2019)
+https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0213368
+
+Source 2:Tropical forest conservation: Attitudes and preferences (Baranzini et al, 2009) (https://www.researchgate.net/publication/222554098_Tropical_forest_conservation_Attitudes_and_preferences)
+
+
+Paragraph [Person A] [Ting]: Deforestation is one of the leading causes of local climate change. Extensive deforestation can lead to dramatic increases in local land surface temperature. These local increases in temperature also have an effect on regional and global circulation and precipitation patterns which can have a compounding effect on the local temperature and eventually the global temperature. Continued deforestation could have dramatic effects on local and global climates with both weather events and significantly increased temperatures. Monitoring the popularity of deforestation as a search term can provide a limited view of how aware, educated, or interested the population is in deforestation. This information can be used to inform organizations on how much a priority informing and educating the public is.
+
+
+
+
+Paragraph [Person B] [Jack]: Deforestation is one of a suite of extractive/destructive economic practices that, along with climate change, is putting strain on our natural environment. Deforestation in particular has a variety of drivers depending on the context and geography, but logging and clearing of land for agriculture remain key explanations. Understanding the public's awareness and interest in deforestation can prove useful in understanding their engagement with and dedication to environmental conversation and protection. Baranzini et al established that Western publics do tend to largely be aware of deforestation, and are theoretically willing to dedicate money toward forest protection. However, as other symptoms of climate change have worsened, deforestation may have fallen outside of the public's attention and interest. Examining Google Trend data for "deforestation" as a keyword provides an initial (although inherently limited) view into that public interest, and how it may have evolved over time. 
+
+
+
+Brianna: Good motivations.
+
+## Visualize {-}
+
+3. Come up with 2 interesting and informative visualizations of the time series and each of you write a paragraph summarizing what you learn about the data from the visualizations.
+
+```{r}
+# Plot 1: Comparing trends in searches for "deforestation" with rates of deforestation as percentage of rate of deforesation in 1990 (Brazil and Global)
+#https://ourworldindata.org/deforestation
+
+#Brianna: This data set is not in the folder so I can't run this code
+deforestation_rate <- read_csv("annual-deforestation.csv")
+
+deforestation_rate_brazil <- deforestation_rate %>% 
+  filter(Code == "BRA", Year >= 2000) %>% 
+  mutate(Date = as.Date(paste(Year, 1, 1, sep = "-")))
+
+deforestation_rate_world <- deforestation_rate %>% 
+  filter(Code == "OWID_WRL", Year >= 2000) %>% 
+  mutate(Date = as.Date(paste(Year, 1, 1, sep = "-")))
+
+ggplot() +
+  geom_line(data = deforestation, aes(x = Date, y = DFSearches)) +
+  geom_line(data = deforestation_rate_world, aes(x = Date, y = Deforestation/158180), color = "red") +
+  geom_line(data = deforestation_rate_brazil, aes(x = Date, y = Deforestation/42548), color = "blue") +
+  theme_minimal()
+
+```
+
+Paragraph of Plot 1 [Person A]: We can see that deforestation rates have been decreasing in the world (in red) and Brazil (in blue) since 2000. This decrease is in line with the decrease in popularity of the search term 'deforestation' in the US. Whether the decrease in deforestation rates actually has an effect on the popularity of said search term is impossible to say but may be a possible reason as well as indicate a general feeling that efforts to slow deforestation appear to be working. It would be interesting to see if deforestation rates increased over the last few years in correlation with increase of the search term in the US over the last few years. According to news sources including Reuters, deforestation has increased in Brazil so deforestation rates could certainly be an indicator of the trend of the popularity of searching 'deforestation' in the US.
+
+
+
+```{r}
+# Plot 2: Plot comparing trends in searches for "deforestation" with trends in forest cover (USA and Global)
+#Data for the plot is courtesy of https://ourworldindata.org/forest-area
+
+ForestCoverUSA <- read_csv("forest-area-as-share-of-land-area-USA.csv")
+ForestCoverWorld <- read_csv("forest-area-as-share-of-land-area-World.csv")
+
+ForestCoverUSA <- ForestCoverUSA %>%
+  mutate(Date = dmy(year))
+
+ForestCoverWorld <- ForestCoverWorld %>%
+  mutate(Date = dmy(year))
+
+ggplot() + 
+  geom_line(data = deforestation, aes(x=Date, y=DFSearches)) +
+  geom_line(data = ForestCoverUSA, aes(x=Date, y=Forest_cover), color = 'red') +
+  geom_line(data = ForestCoverWorld, aes(x=Date, y=Forest_cover), color = 'blue')
+
+
+```
+
+Paragraph of Plot 2 [Person B]:
+
+The above plot overlays trends in forest cover (as a percentage of total land area) over time for the United States (in red) and globally (in blue). While the levels of American Google searches for "deforestation" do seem to ebb and flow significantly compared to their levels in 2004, the overall level of forest cover have not changed drastically since that time, either in this country or across the globe. This suggests that changes in search interest may be driven by factors beyond the simple extent of de- (or re-) forestation at any given moment. While some countries, such as Nicauragua, did experience significant shifts in overall forest cover during this period, it would be difficult to claim these shifts are catching the attention of American googlers (and impacting the trends we see above) without further evidence. 
+
+
+
+## Detrend & Decompose {-}
+
+
+4. Estimate the trend of the time series data; make a plot of the estimated trend and a plot of the left over residuals. Justify the method you used to estimate the trend and write a brief paragraph about what you learn about the data from the visualizations.
+
+ANSWER:
+
+```{r}
+#Brianna: I recommend taking the log() 
+deforestation <- deforestation %>% mutate(DFSearches = log(DFSearches))
+
+DFdata <- ts(deforestation$DFSearches, frequency = 12)
+
+fltr <- cbind(c(.05,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.1,.05)) #Brianna; fltr weights must add to 1; this adds to 1.2. 
+fltr <- fltr/sum(fltr)
+
+#Estimates of the trend
+deforestation <- deforestation %>%
+  mutate(SearchTrend = as.numeric(stats::filter(DFdata, filter = fltr, method = 'convo', sides = 2)))
+
+deforestation <- deforestation %>%
+  mutate(SearchTrend2 = predict(loess(DFSearches ~ dec_date, data = deforestation, span = .2)))
+  
+deforestation <- deforestation %>%
+    mutate(SearchTrend3 = predict(lm(DFSearches ~ bs(Date, knots = c(2010, 2019), degree = 3), data = deforestation)))
+
+#Plotting estimates
+deforestation %>%
+  ggplot(aes(x=Date, y = DFSearches)) +
+  geom_line() +
+  geom_line(aes(y=SearchTrend), color = 'purple') +
+  geom_line(aes(y=SearchTrend2), color = 'navy') +
+  geom_line(aes(y = SearchTrend3), color = "red") #I actually recommend using the spline as it is smoother; want to avoid overfititng.
+
+
+#Plotting residuals
+deforestation %>%
+  ggplot(aes(x=Date, y=DFSearches - SearchTrend3)) + #Brianna: I changed this to spline model
+  geom_line() + geom_hline(yintercept = 0) + geom_smooth(se=FALSE) + theme_classic() 
+
+
+
+```
+
+
+Paragraph [Person A]: We also used a spline estimate mainly to answer questions later on. The current spline model is of degree 3 and has knots at 2012 and 2019. It is a more biased estimate than the other models.
+
+
+
+
+Paragraph [Person B]:
+
+We tried several estimates for the trend, and ultimately settled on a local regression (LOESS) with a span of 0.2. We made this call because it generated a comparable trend to the moving average method (see the line in purple above) while generating estimates for the whole data span (moving average left values "hanging" on either end, due to lacking inputs). Judging from the trend line, it seems clear that there has been a downward trend in the number of American Google searches for "deforestation" since 2004/2005, despite significant seasonality. This jagged seasonality is particularly evident in the plot of the residuals. 
+
+
+5. Estimate the seasonality and make a plot of the seasonality and a plot of the left over residuals. Justify the method you used to estimate the seasonality and write a brief paragraph about what you learn about the data from the visualizations.
+
+
+
+ANSWER:
+```{r}
+deforestation <- deforestation%>% 
+  mutate(Detrend =  DFSearches - SearchTrend3)
+
+lm.season <- lm(Detrend ~ factor(month), data = deforestation)
+
+deforestation <- deforestation%>%
+    mutate(Season = predict(lm.season, newdata = deforestation))
+
+deforestation %>%
+    ggplot(aes(x = month, y = Detrend, group = year)) + 
+    geom_point() + 
+    geom_line() +
+    geom_line(aes(y = Season), color = "purple", size = 2) + 
+    geom_hline(yintercept = 0) +
+    theme_classic()
+
+
+plot(predict(lm.season, 
+               newdata = data.frame(month = 1:12)),
+       type='b',
+       ylab='Estimated Seasonality',
+       xlab='Month')
+
+deforestation <- deforestation %>%
+  mutate(errors = lm.season$residuals)
+
+plot(ts(deforestation$errors,start=c(2004,1),frequency=12))
+
+deforestation %>%
+  ggplot(aes(x = dec_date, y = errors)) + 
+  geom_line() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_classic()
+```
+
+
+```{r}
+deforestation <- deforestation %>%
+  mutate(factoredmonth = factor(month)) %>%
+  mutate(residuals = DFSearches - SearchTrend3)
+
+#Fitting model
+SeasonalModel <- lm(residuals ~ factoredmonth, data = deforestation)
+
+#Adding seasonality estimates to df
+#Brianna: You can use predict() to do this without having to do it manually (avoid human coding errors)
+
+deforestation <- deforestation %>%
+  mutate(EstSeasonality = predict(SeasonalModel)) %>%
+  mutate(Error = residuals - EstSeasonality)
+
+
+#smSummary <- summary(SeasonalModel)$coefficients
+#SeasonalEstimates <- smSummary[,1]
+
+#for(i in 2:12){
+#  SeasonalEstimates[i] = SeasonalEstimates[i] + smSummary[1,1] #adding intercept to months 2-12
+#}
+
+#plot(SeasonalEstimates, type ='b')
+
+#deforestation <- deforestation %>%
+#  mutate(EstSeasonality = SeasonalEstimates[factoredmonth])
+
+#plot
+deforestation %>%
+  ggplot(aes(x=Date, y= residuals - EstSeasonality)) +
+  geom_line() + theme_classic()
+
+```
+
+Paragraph [Person A]: ???
+
+
+
+
+Paragraph [Person B]:
+We used a regression model with indicator variables to estimate seasonality. We chose this method because it seemed like it would better represent the "jagged" seasonality than using a sin or cos curve, We can see from a plot of the coefficients of that model that there are two peaks and two valleys throughout the year- search interest seems to be seasonally highest in the Fall and Spring, with a deep valley in the summer and a smaller valley in the winter. This pattern caught us by surprise, and our group wondered whether this was an effect of academic breaks / if a sizable portion of this search traffic was driven by students doing research for school. The remaining plot shows the error after trend and seasonality have been accounted for. We can see that the errors may not have constant variance over the time series, but they do appear to have constant mean. 
+
+
+6. Now, try going back to the original data and using differencing to remove the trend and seasonality. Make a plot of the left over residuals. Write a brief paragraph about what you learn about the data from the visualization.
+
+ANSWER:
+
+```{r}
+plot(diff(diff(deforestation$DFSearches, differences = 1), lag = 12, differences = 1),type='l')
+```
+
+Paragraph [Person A]: The residuals seem to be centered around 0. The variance seems generally constant but increases at the edges of the graph.
+
+Brianna: I'm concerned about the unequal variance in these differences...
+
+
+
+
+Paragraph [Person B]: ???
+
+7. Lastly, plot the sample autocorrelation function and the sample partial autocorrelation function (`acf2()`) of the errors after removing both the trend and seasonality [choose the errors from differencing or from estimating & removing]. Describe the patterns you see and make comments about any insights you might have about how to go about modeling the errors. The partial autocorrelation function gives the conditional correlation of points lag k apart, conditional on the data in between. [If we haven't talked about what to do with info we gain from the pacf yet, you can still comment on what you observe].
+
+ANSWER:
+
+```{r}
+deforestation <- deforestation %>%
+  mutate(Error = residuals - EstSeasonality)
+
+acf(deforestation$Error)
+acf2(deforestation$Error)
+
+```
+
+Paragraph [Person A]: The acf does have a large drop after lag 1 but without that knowledge, there is almost no way to tell what kind of patterns there are. So MA(1) or white noise to model errors potentially.
+
+Brianna: You might want to try a seasonal MA(1) model to deal with higher autocorrelation around lag 12...If you switch to a spline model, then add in a AR(1).
+
+
+Paragraph [Person B]:
+Unlike the examples we've seen in class, it seems as if there isn't any significant patterns in the ACF or PACF. Most of the values fall within the "white noise" boundaries, including those at the nearest lags, and there is no indication of a decay or drop. While some do fall outside of the boundaries slightly, there is no obvious pattern, and could be up to simply random chance. White noise might be the best choice of model?
+
+## Modeling Errors {-}
+
+8. Come up with a list of candidate models for the errors based on the ACF and PACF. Justify those choices.
+
+ANSWER:
+
+Paragraph [Person A]: MA(1) due to the large drop of the acf after 1 lag.
+
+
+
+
+Paragraph [Person B]: Worth trying a purely white-noise model with no autocorrelation between the errors, given the lack of clear pattern in ACF/PACF (MA(0)?)
+
+
+
+9. Fit the candidate models for the errors and compare them. Write a paragraph justifying the choice of one model over the other models.
+
+
+ANSWER:
+
+```{r}
+mod.fit1 <- sarima(deforestation$Error, p = 0, d = 0, q = 1)  #MA(1)
+```
+
+```{r}
+mod.fit2 <- sarima(deforestation$Error, p = 0, d = 0,
+    q = 0) #white noise model
+
+mod.fit3 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0) #AR(1), just to compare
+
+mod.fit4 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0,P = 1, S = 12) #AR(1) + Seasonal AR(1), just to compare
+
+mod.fit5 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0,Q = 1, S = 12) #AR(1) + Seasonal MA(1), just to compare
+```
+
+```{r}
+mod.fit1$BIC
+
+mod.fit2$BIC
+
+mod.fit3$BIC
+
+mod.fit4$BIC
+
+mod.fit5$BIC
+```
+
+
+Paragraph [Person A]: ??
+
+Brianna: See the models I added above. A "white noise" model is just estimating the mean. 
+
+
+Paragraph [Person B]: None of the models are particurally "good", but the white noise model appears to perform the best of those tested. The white noise model (ARMA(0,0)?) achieved the lowest BIC, indicating that it best represents the data. Additionally, that model had a somehwat higher p-value for the Ljung-Box statistic (only for lag 1, but still) compared to the other models, which is also a desirable feature. 
+
+
+10. Now fit your chosen model, incorporating the trend estimation or differencing in the model fit. If you used B-splines or a polynomial linear model, incorporate your estimation of the trend and seasonality into model fit using some example code below (consolidate your lm models into one). If you are using the differenced data, incorporate your differencing through d (trend) and D (seasonality) arguments in sarima(). Rerun the final models. 
+
+
+ANSWER:
+
+I'd recommend including spline model + factor(model) + ARMA + Seasonal ARMA
+
+
+```{r}
+# Generating data so the Example Code Runs
+time = 1:500
+y <- .5*time + 300*(time == 123) + arima.sim(list(ar=c(.2,.4)),500)
+
+# Example Code Below
+trend.mod <- lm(y ~ time + (time == 123))
+X = model.matrix(trend.mod)[,-1] #removes intercept column
+
+sarima(y,p=2,d=0,q=0, xreg = X)
+```
+
+## Predicting the Future {-}
+
+*Try this out, if you have time, otherwise, you can incorporate this into the mini-project.*
+
+11. Create a prediction for the next 24 months in the future using `sarima.for()`. Make a plot of those predictions and tell a brief story about what they can tell you. 
+
+ANSWER:
+
+```{r}
+
+```
+
+Paragraph [Person A]:
+
+
+
+
+Paragraph [Person B]:

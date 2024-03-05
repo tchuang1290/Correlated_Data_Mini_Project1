@@ -1,0 +1,249 @@
+---
+title: "Analysis of Google Trends for Deforestation"
+author: "Jack Acomb and Ting Huang"
+date: "3/4/2022"
+output:
+  html_document:
+    df_print: paged
+bibliography: Library.bib
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warnings=FALSE)
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(ggplot2)
+library(readr)
+library(astsa)
+library(splines)
+```
+
+## Introduction
+
+Climate change and environmental degradation stand as some of the most important problems currently facing our nation and our world. However, they also remain some of the most complex problems. Troubling environmental trends emerge in a wide array of contexts, ranging from rates of natural disasters, pollution, global temperatures, water access, and food yields, just to highlight a few. In the midst of such a barrage, remaining focused on each constituent part of the crisis seems challenging, especially for members of the general public. 
+
+To that end, today we investigate the American public's interest in deforestation. According to the most recent United Nations Global Forest Resources Assessment (published in 2020), deforestation has slowed in the past several decades, but remains a significant challenge; they project that "it is unlikely that the Global Forest Goal of increasing the world’s forest area by 3 percent will be met by 2030" [@fao_2020]. In that context, it would seem that there is still need for sustained pressure and attention paid to the problem of deforestation. However, in the American context, deforestation is often muted in discourse surrounding climate initiatives and largely absent from the broader political discourse. For example, President Biden's climate plan does make reference to preventing deforestation, but it is overshadowed by other initiatives like investment in clean energy [@bidencampaign_2020]. In addition, neither of the platforms of the major Minnesota political parties make more than passing reference to forest policy[@dfl, @mngop_2020]. Given this, we believe that it is worth investigating trends over time in the American public's interest in deforestation, in hopes of determining to what degree it remains an area of interest in the broader fight against the climate crisis. 
+
+## Data
+
+```{r}
+#read in data
+#clean data
+deforestation <- read_csv("deforestationTS.csv")
+
+deforestation <- deforestation %>%
+  mutate(Date = ym(Month)) %>%
+  mutate(month = month(Date)) %>%
+  mutate(year = year(Date)) %>%
+  mutate(dec_date = decimal_date(Date))
+```
+The data utilized in this project comes from Google Trends, which keeps track of the relative interest in certain topics through Google search terms. This is done by taking a random sample of anonymous search data over a specific time period. The data is normalized by comparing the searches for your specified search term with the total searches in the specified time and region. This prevents factors like population from affecting the outcome.
+
+There are only 2 variables in the dataset which are Month, which includes a month and a year, and DFSearches, originally named deforestation, which provides a numerical measure of relative interest in the search term 'deforestation' out of 100. Trends scales the search data by setting the peak popularity at 100 for the specified time and region with every other point being in comparison to that. Month gives the month and year when the specified region had that level of relative interest. A plot of the data as provided by Google Trends is available below.
+
+```{r}
+deforestation_rate <- read_csv("annual-deforestation.csv")
+
+deforestation_rate_brazil <- deforestation_rate %>% 
+  filter(Code == "BRA", Year >= 2000) %>% 
+  mutate(Date = as.Date(paste(Year, 1, 1, sep = "-")))
+
+deforestation_rate_world <- deforestation_rate %>% 
+  filter(Code == "OWID_WRL", Year >= 2000) %>% 
+  mutate(Date = as.Date(paste(Year, 1, 1, sep = "-")))
+
+ggplot() +
+  geom_line(data = deforestation, aes(x = Date, y = DFSearches)) 
+
+ggplot() +
+  geom_line(data = deforestation, aes(x = Date, y = DFSearches)) +
+  geom_line(data = deforestation_rate_world, aes(x = Date, y = Deforestation/158180), color = "red") +
+  geom_line(data = deforestation_rate_brazil, aes(x = Date, y = Deforestation/42548), color = "blue") +
+  theme_minimal()
+
+ForestCoverUSA <- read_csv("forest-area-as-share-of-land-area-USA.csv")
+ForestCoverWorld <- read_csv("forest-area-as-share-of-land-area-World.csv")
+
+ForestCoverUSA <- ForestCoverUSA %>%
+  mutate(Date = dmy(year))
+
+ForestCoverWorld <- ForestCoverWorld %>%
+  mutate(Date = dmy(year))
+
+ggplot() + 
+  geom_line(data = deforestation, aes(x=Date, y=DFSearches)) +
+  geom_line(data = ForestCoverUSA, aes(x=Date, y=Forest_cover), color = 'chartreuse4') +
+  geom_line(data = ForestCoverWorld, aes(x=Date, y=Forest_cover), color = 'red')
+
+```
+
+Additionally, for the purposes of contextualization, we provide search trend data alongside trend lines for deforestation metrics in Brazil (in blue) and the world (in red) since 2000 [@ritchie_roser_2021]. As the FAO noted in their 2020 report, deforestation has been on the decline in the past decades, and this decrease is seemingly in line with the decrease in popularity of the search term 'deforestation' in the US. However, a similar plot comparing search trends to overall proportions of forest cover (globally in red, in North America in green) seems to show a less meaningful or explanatory trend. While interrogating this correlation is beyond the scope of this project, the authors thought it important to highlight for readers— understanding the relationship between physical conditions and public interest remains an avenue for future inquiry. In either case, there is clearly still significant variation in search trends that remains unexplained, and this variation will be the subject of the bulk of our following analysis. 
+
+
+## Methods
+
+In order to better understand the trend in our data, we attempt to decompose the time series and generate an explanatory model. This section will explain the general methodological approach, with discussion of results in the following section.
+
+As a first step, in order to bring the data closer to constant variance for the purposes of modeling, we transformed the data using a logarithm transformation. We then fit several estimations of trend using different methods [@heggeseth_2022]; we ultimately settled on using a basis spline model with knots at the years 2010 and 2019. This provided the dual advantages of being parametric while also avoiding over-fitting.
+
+```{r results = "hide"}
+deforestation <- deforestation %>% mutate(DFSearches = log(DFSearches))
+
+DFdata <- ts(deforestation$DFSearches, frequency = 12)
+
+fltr <- cbind(c(.05,.1,.1,.1,.1,.1,.1,.1,.1,.1,.05)) 
+fltr <- fltr/sum(fltr)
+
+#Estimates of the trend
+deforestation <- deforestation %>%
+  mutate(SearchTrend = as.numeric(stats::filter(DFdata, filter = fltr, method = 'convo', sides = 2)))
+
+deforestation <- deforestation %>%
+  mutate(SearchTrend2 = predict(loess(DFSearches ~ dec_date, data = deforestation, span = .2)))
+  
+deforestation <- deforestation %>%
+    mutate(SearchTrend3 = predict(lm(DFSearches ~ bs(Date, knots = c(2010, 2019), degree = 3), data = deforestation)))
+
+#Plotting estimates
+deforestation %>%
+  ggplot(aes(x=Date, y = DFSearches)) +
+  geom_line() +
+  geom_line(aes(y=SearchTrend), color = 'purple') +
+  geom_line(aes(y=SearchTrend2), color = 'navy') +
+  geom_line(aes(y = SearchTrend3), color = "red") 
+
+#Plotting residuals
+deforestation %>%
+  ggplot(aes(x=Date, y=DFSearches - SearchTrend3)) + 
+  geom_line() + geom_hline(yintercept = 0) + geom_smooth(se=FALSE) + theme_classic()
+```
+
+To remove the apparent seasonality in the remaining residuals, we generated a regression model with monthly indicator variables. We selected this method over the use of a defined sine or cosine curve to account for the multiple peaks and troughs that appear over the course of a season. 
+
+```{r}
+deforestation <- deforestation%>% 
+  mutate(Detrend =  DFSearches - SearchTrend3)
+
+lm.season <- lm(Detrend ~ factor(month), data = deforestation)
+
+deforestation <- deforestation%>%
+    mutate(Season = predict(lm.season, newdata = deforestation))
+
+
+plot(predict(lm.season, 
+               newdata = data.frame(month = 1:12)),
+       type='b',
+       ylab='Estimated Seasonality',
+       xlab='Month')
+
+deforestation <- deforestation %>%
+  mutate(errors = lm.season$residuals)
+
+deforestation %>%
+  ggplot(aes(x = dec_date, y = errors)) + 
+  geom_line() + 
+  geom_hline(yintercept = 0) +
+  geom_smooth(se = FALSE) +
+  theme_classic()
+
+deforestation <- deforestation %>%
+  mutate(factoredmonth = factor(month)) %>%
+  mutate(residuals = DFSearches - SearchTrend3)
+
+#Fitting model
+SeasonalModel <- lm(residuals ~ factoredmonth, data = deforestation)
+
+deforestation <- deforestation %>%
+  mutate(EstSeasonality = predict(SeasonalModel)) %>%
+  mutate(Error = residuals - EstSeasonality)
+```
+
+Finally, having accounted for both trend and seasonality, we attempted to fit an explanatory model for the remaining error terms. Initial model selection was based upon the trend observed in the errors' autocorrelation and partial autocorrelation functions (noting the sudden drop in the latter function after one lag), after which models were compared using the Bayesian Information Criterion (BIC). A 1st order autoregressive moving average model (p = 1, q = 1) with a seasonal 1st order autoregressive moving average component (P=1, Q = 1, S=12) yielded the best BIC of the subset, and thus was selected. This was also the only model that had some large p-values for the Ljung-Box statistic, which is favorable.
+
+```{r}
+acf2(deforestation$Error)
+
+mod.fit1 <- sarima(deforestation$Error, p = 0, d = 0, q = 1)  #MA(1)
+
+mod.fit3 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0) #AR(1)
+
+mod.fit4 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0,P = 1, S = 12) #AR(1) + Seasonal AR(1)
+
+mod.fit5 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 0,Q = 1, S = 12) #AR(1) + Seasonal MA(1)
+
+mod.fit6 <- sarima(deforestation$Error, p = 1, d = 0,
+    q = 1,P=1,Q = 1, S = 12) #ARMA(1) + Seasonal ARMA(1)
+```
+
+```{r}
+mod.fit1$BIC
+
+mod.fit3$BIC
+
+mod.fit4$BIC
+
+mod.fit5$BIC
+
+mod.fit6$BIC
+```
+
+For the purposes of analysis and forecasting, the final model will be a re-composition of the three component models (trend, seasonality, and error) as delineated above.  
+
+
+## Results
+
+With regards to trend, it is clear that there is a downward trend over time in the proportional popularity of searches for deforestation, with the peak resting essentially at the beginning of the observation period in 2004/2005. Popularity declines thoughout the mid 2000's, and while it stabalizes and even experiences a resurgance that peaks in 2018/2019, the trend has begun to decrease again fully by 2021. 
+
+```{r}
+deforestation %>%
+  ggplot(aes(x=Date, y = DFSearches)) +
+  geom_line() +
+  geom_line(aes(y = SearchTrend3), color = "red")
+```
+
+Seasonality analysis on the de-trended data showed that there were typically two yearly peaks in public Google interest in deforestation, roughly centered around April/May and October/November. Conversely, seasonal low-points were, on average, centered around July/August and to a lesser extent December/January.  
+
+```{r}
+plot(predict(lm.season, 
+               newdata = data.frame(month = 1:12)),
+       type='b',
+       ylab='Estimated Seasonality',
+       xlab='Month')
+```
+
+When the models for trend, seasonality, and error were combined, the resulting model performed relatively well; the ACF of residuals remained largely within acceptable bounds, and the p-values for the Ljung-Box statistic were high for large lags, which is desirable. 
+
+```{r results = "hide"}
+trend.mod <- lm(DFSearches~SearchTrend3+factor(EstSeasonality),
+                data = deforestation)
+X = model.matrix(trend.mod)[,-1] #removes intercept column
+sarima(deforestation$DFSearches,p=1,d=0,q=1,P=1,D=0,Q=1,S=12, xreg = X)
+```
+
+The model can be used to create a forecast for the next 12 months of search interest in the term deforestation. The forecast predicts highs and lows in line with typical seasonality, but that the overall trend will remain somewhat similar to this year's, rather than dropping significantly further. 
+
+```{r}
+sarima.for(deforestation$DFSearches,24,p=1,d=0,q=1,P=1,D=0,Q=1,S=12)
+```
+
+## Discussion and Conclusions
+
+Our analysis indicates that there is, in fact, a downward trend in proportional interest in the term deforestation over the time period from 2004 until present. This has not been a linear trend, and is interrupted significantly by seasonal highs and lows. Future research may turn more direct attention to what caused the increase in interest in deforestation that peaked in 2019, or what is driving the unsymmetrical seasonal patterns. 
+
+The authors do note that the seasonal peaks appear to be line with western academic calenders, while valleys correspond with traditionally western Summer and Winter academic breaks. We thus hypothesize that some of the seasonality may be driven by students researching deforestation during the academic year, and spending less time researching it while on break. However, further analysis would need to be conducted in order to understand if this hypothesis bears out. One approach could be to investigate trends of a similar term in countries that have different academic break schedules than the United States, or to use some sort of metric in the modelling process to control for the academic calender. 
+
+Looking toward the forecast for the coming year, it is clear that levels are not expected to rebound based upon our analysis. While our model does not project that search volumes will plummet, it does forecast that interest will remain below historical levels of the past few years, which remains potentially troubling for advocates and activists wishing to move the needle on deforestation efforts. However, this analysis may inform timing of future outreach strategies; given observed seasonal interest patterns, efforts in the Fall and Spring may potentially reach greater audiences than those in the Summer or Winter, increasing efficacy regardless of the underlying macro-trend.  
+
+Google Trend data provides a useful window into public interest in given terms, but it is important to note is limitations. As mentioned above, the provided metric of search interest is a proportional measure, where overall search volume over time is controlled for. While this is useful in comparting proportional trends, it may disguise the fact that a greater absolute number of people are searching for a given term, even if they are a proportionally smaller piece of the whole. This phenomenon has been documented in Google Trends data for other ecology related terms [@burivalova_butler_wilcove_2018], and may very-well be the case in this instance as well. Additionally, this data only captures users in the United States, and is inherently limited to those who have access to a computer, the internet, and choose to use Google. These requirements limit access to certain groups of people, and elevate the influence of other groups. A more accurate picture of the public's interest in deforestation would require a more truly representative sample.  
+
+## Acknowledgements
+
+We would like to thank Dr. Brianna Heggeseth for her invaluable guidance on this project. 
+
+## References
+
